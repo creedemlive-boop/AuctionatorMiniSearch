@@ -1,0 +1,19 @@
+## Interface: 120001
+
+## Title: Auctionator Mini Search (Retail)
+## Author: Creedem@Blackrock
+## Version: 1.0
+## Notes: Fast search in Auctionator database
+## SavedVariables: AMS_DB
+## Category: Auctions
+## Category-deDE: Auktionen
+## Dependencies: Auctionator
+## X-License: MIT
+## X-Curse-Project-ID: 999999
+
+Modules\Utils.lua
+Modules\Localization.lua
+Modules\UI.lua
+Modules\Search.lua
+Modules\Core.lua
+Modules\Indexing.lua
