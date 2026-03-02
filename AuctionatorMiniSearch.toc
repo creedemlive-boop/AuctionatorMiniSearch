@@ -8,8 +8,9 @@
 ## Category: Auctions
 ## Category-deDE: Auktionen
 ## Dependencies: Auctionator
+## IconTexture: Interface\AddOns\AuctionatorMiniSearch\Assets\icon
 ## X-License: MIT
-## X-Curse-Project-ID: 999999
+## X-Curse-Project-ID: 1472754
 
 Modules\Utils.lua
 Modules\Localization.lua

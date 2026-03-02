@@ -1,0 +1,5 @@
+package-as: AuctionatorMiniSearch
+
+ignore:
+  - .gitignore
+  - LOCAL_GIT_NOTES.md

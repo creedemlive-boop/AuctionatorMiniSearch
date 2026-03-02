@@ -22,3 +22,10 @@ See LICENSE.md for full terms.
 ## Blizzard Policy Note
 
 This project is intended to follow the Blizzard UI Add-On Development Policy.
+
+## Bugreport:
+
+Any issues you find should be posted here : [Issues][issueTracker]
+
+
+[issueTracker]: https://github.com/creedemlive-boop/AuctionatorMiniSearch/issues

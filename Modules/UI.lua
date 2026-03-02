@@ -9,6 +9,8 @@ local MIN_FRAME_HEIGHT = 500
 local MINIMAP_BUTTON_SIZE = 31
 local MINIMAP_BORDER_SIZE = 53
 local MINIMAP_DEFAULT_RADIUS_OFFSET = 10
+local MINIMAP_CUSTOM_ICON_PATH = "Interface\\AddOns\\AuctionatorMiniSearch\\Assets\\icon"
+local MINIMAP_FALLBACK_ICON_PATH = "Interface\\Icons\\INV_Misc_Spyglass_03"
 
 local function RefreshResetPopupTexts()
   StaticPopupDialogs["AMS_RESET_SV_CONFIRM"] = StaticPopupDialogs["AMS_RESET_SV_CONFIRM"] or {}
@@ -58,7 +60,9 @@ minimapBg:SetSize(20, 20)
 minimapBg:SetPoint("TOPLEFT", 7, -5)
 
 local minimapIcon = minimapButton:CreateTexture(nil, "ARTWORK")
-minimapIcon:SetTexture("Interface\\Icons\\INV_Misc_Spyglass_03")
+if not minimapIcon:SetTexture(MINIMAP_CUSTOM_ICON_PATH) then
+  minimapIcon:SetTexture(MINIMAP_FALLBACK_ICON_PATH)
+end
 minimapIcon:SetPoint("TOPLEFT", 7, -6)
 minimapIcon:SetPoint("BOTTOMRIGHT", -7, 6)
 
