@@ -43,6 +43,11 @@ function AMS.ClearRows(rows)
   for _, row in ipairs(rows) do
     row.text:SetText("")
     row.itemID = nil
+    row.itemName = nil
+    row.itemLink = nil
+    row.price = nil
+    row.minPrice = nil
+    row.maxPrice = nil
     row.icon:SetTexture(nil)
   end
 end

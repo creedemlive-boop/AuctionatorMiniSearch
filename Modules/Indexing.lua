@@ -383,6 +383,7 @@ function AMS.RefreshStalePrices()
 
     AMS.isRefreshingStale = false
     AMS.analysisCache = {}
+    AMS.analysisCacheSize = 0
 
     if (updated > 0 or removed > 0) and AMS.SaveSettings then
       AMS.SaveSettings()
@@ -862,6 +863,7 @@ function AMS.BuildIndex()
   AMS.missingSet = {}
   wipe(AMS.retryCount)
   AMS.analysisCache = {}
+  AMS.analysisCacheSize = 0
 
   -- Check whether a valid price database table is available.
   if type(AMS.priceDB) ~= "table" then

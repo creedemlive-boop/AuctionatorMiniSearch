@@ -376,6 +376,7 @@ function AMS.ResetSavedData()
   AMS.retryCount = AMS.retryCount or {}
   wipe(AMS.retryCount)
   AMS.analysisCache = {}
+  AMS.analysisCacheSize = 0
   AMS.indexReady = false
   AMS.lastRescanAt = 0
 

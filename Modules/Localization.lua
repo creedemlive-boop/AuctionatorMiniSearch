@@ -253,8 +253,6 @@ local locales = {
   },
 }
 
-AMS.locales = locales
-
 -- Returns the default locale used by AMS content selection.
 function AMS.GetDefaultLocale()
   local wowLocale = GetLocale and GetLocale() or "enUS"
@@ -269,13 +267,23 @@ function AMS.GetCurrentLocale()
   return AMS.GetDefaultLocale()
 end
 
-AMS.locale = AMS.GetCurrentLocale()
+AMS.locale = locale
+
+-- Select the active locale table and a fallback; then release the full locales
+-- table so the unused locale's strings can be garbage-collected.
+local _activeLocaleTable = locales[locale] or locales.enUS
+local _fallbackLocaleTable = (locale ~= "enUS") and locales.enUS or nil
+locales = nil  -- Allow GC of the inactive locale table
 
 -- Resolves a localized key and applies optional string formatting args.
 function AMS.L(key, ...)
-  AMS.locale = AMS.GetCurrentLocale()
-  local lang = locales[AMS.locale] or locales.enUS
-  local text = lang[key] or locales.enUS[key] or locales.deDE[key] or key
+  local text = _activeLocaleTable[key]
+  if text == nil and _fallbackLocaleTable then
+    text = _fallbackLocaleTable[key]
+  end
+  if text == nil then
+    text = key
+  end
   if select("#", ...) > 0 then
     local ok, formatted = pcall(string.format, text, ...)
     if ok then

@@ -156,8 +156,13 @@ local function BuildSafeRowItemLink(entry)
   return "item:" .. tostring(itemID)
 end
 
+local ANALYSIS_CACHE_MAX = 500
+
 local function GetAnalysisMeta(itemID)
-  AMS.analysisCache = AMS.analysisCache or {}
+  if not AMS.analysisCache then
+    AMS.analysisCache = {}
+    AMS.analysisCacheSize = 0
+  end
 
   if AMS.analysisCache[itemID] then
     return AMS.analysisCache[itemID]
@@ -182,6 +187,13 @@ local function GetAnalysisMeta(itemID)
         meta.age = resultAge
       end
     end
+  end
+
+  -- Evict cache when it grows too large to prevent unbounded memory growth.
+  AMS.analysisCacheSize = AMS.analysisCacheSize + 1
+  if AMS.analysisCacheSize > ANALYSIS_CACHE_MAX then
+    AMS.analysisCache = {}
+    AMS.analysisCacheSize = 1
   end
 
   AMS.analysisCache[itemID] = meta
