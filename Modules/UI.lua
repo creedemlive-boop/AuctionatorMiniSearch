@@ -816,17 +816,6 @@ local function CreateOptionsWindow()
       )
 
       AddCheckOption(
-        L("OPTION_PRICE_TOOLTIP_LABEL"),
-        function()
-          return not AMS.settings or AMS.settings.showPriceTooltip ~= false
-        end,
-        function(value)
-          AMS.settings.showPriceTooltip = value
-        end,
-        L("OPTION_PRICE_TOOLTIP_INFO")
-      )
-
-      AddCheckOption(
         L("OPTION_MINIMAP_ICON_LABEL"),
         function()
           return not AMS.settings or not AMS.settings.minimap or AMS.settings.minimap.hide ~= true
@@ -1381,24 +1370,6 @@ function AMS.BuildRows()
         else
           GameTooltip:SetHyperlink("item:" .. self.itemID)
         end
-
-        if not AMS.settings or AMS.settings.showPriceTooltip ~= false then
-          local priceText = nil
-          local minPrice = tonumber(self.minPrice)
-          local maxPrice = tonumber(self.maxPrice)
-          local price = tonumber(self.price)
-          if minPrice and maxPrice and minPrice > 0 and maxPrice > minPrice then
-            priceText = AMS.FormatMoney(minPrice) .. " - " .. AMS.FormatMoney(maxPrice)
-          elseif price and price > 0 then
-            priceText = AMS.FormatMoney(price)
-          end
-
-          if priceText then
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(L("TOOLTIP_AMS_PRICE_FMT", priceText), 0.55, 0.9, 0.55)
-          end
-        end
-
         GameTooltip:Show()
       end
     end)

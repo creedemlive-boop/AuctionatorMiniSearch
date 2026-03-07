@@ -5,6 +5,7 @@
 local AMS = _G["AuctionatorMiniSearch"]
 local L = AMS.L
 local LIVE_PRICE_REFRESH_SECONDS = 10
+local MAX_ANALYSIS_CACHE_SIZE = 2000
 
 local function GetMinSearchLength()
   local configured = AMS.settings and tonumber(AMS.settings.minSearchLength) or 2
@@ -56,13 +57,24 @@ local function GetEntryDisplayName(entry)
   local preferred
   local fallback
 
-  if activeLocale == "deDE" then
-    preferred = (namesByLocale and namesByLocale.deDE) or entry.nameLocalized or entry.baseName
-    fallback = (namesByLocale and namesByLocale.enUS) or entry.nameEN or entry.name
-  else
-    preferred = (namesByLocale and namesByLocale.enUS) or entry.nameEN or entry.name
-    fallback = (namesByLocale and namesByLocale.deDE) or entry.nameLocalized or entry.baseName
+  preferred = (namesByLocale and namesByLocale[activeLocale])
+    or ((activeLocale ~= "enUS") and namesByLocale and namesByLocale.enUS)
+    or ((activeLocale ~= "deDE") and namesByLocale and namesByLocale.deDE)
+    or entry.nameLocalized
+    or entry.baseName
+    or entry.nameEN
+    or entry.name
+
+  if namesByLocale then
+    for _, localeName in pairs(namesByLocale) do
+      if type(localeName) == "string" and localeName ~= "" and localeName ~= preferred then
+        fallback = localeName
+        break
+      end
+    end
   end
+
+  fallback = fallback or entry.name or entry.nameEN or entry.nameLocalized or entry.baseName
 
   local displayName = StripLegacyItemLevelSuffix(preferred)
   if not displayName or displayName == "" then
@@ -87,22 +99,23 @@ local function EntryMatchesQuery(entry, query)
 
   local activeLocale = GetActiveLocale()
   local namesByLocale = type(entry.names) == "table" and entry.names or nil
-  local primary
-  local secondary
-  local tertiary
+  local primary = (namesByLocale and namesByLocale[activeLocale])
+    or ((activeLocale ~= "enUS") and namesByLocale and namesByLocale.enUS)
+    or ((activeLocale ~= "deDE") and namesByLocale and namesByLocale.deDE)
+    or entry.nameLocalized
+    or entry.baseName
+    or entry.nameEN
+    or entry.name
 
-  if activeLocale == "deDE" then
-    primary = (namesByLocale and namesByLocale.deDE) or entry.nameLocalized or entry.baseName
-    if not primary or primary == "" then
-      secondary = (namesByLocale and namesByLocale.enUS) or entry.nameEN or entry.name
+  local secondary = entry.name or entry.nameEN or entry.nameLocalized or entry.baseName
+  local tertiary = nil
+  if namesByLocale then
+    for _, localeName in pairs(namesByLocale) do
+      if type(localeName) == "string" and localeName ~= "" and localeName ~= primary and localeName ~= secondary then
+        tertiary = localeName
+        break
+      end
     end
-    tertiary = entry.name
-  else
-    primary = (namesByLocale and namesByLocale.enUS) or entry.nameEN or entry.name
-    if not primary or primary == "" then
-      secondary = (namesByLocale and namesByLocale.deDE) or entry.nameLocalized or entry.baseName
-    end
-    tertiary = entry.nameLocalized or entry.baseName
   end
 
   if type(primary) == "string" and primary ~= "" and string.find(string.lower(primary), query, 1, true) then
@@ -158,6 +171,7 @@ end
 
 local function GetAnalysisMeta(itemID)
   AMS.analysisCache = AMS.analysisCache or {}
+  AMS.analysisCacheOrder = AMS.analysisCacheOrder or {}
 
   if AMS.analysisCache[itemID] then
     return AMS.analysisCache[itemID]
@@ -185,6 +199,15 @@ local function GetAnalysisMeta(itemID)
   end
 
   AMS.analysisCache[itemID] = meta
+
+  table.insert(AMS.analysisCacheOrder, itemID)
+  if #AMS.analysisCacheOrder > MAX_ANALYSIS_CACHE_SIZE then
+    local evictItemID = table.remove(AMS.analysisCacheOrder, 1)
+    if evictItemID ~= nil then
+      AMS.analysisCache[evictItemID] = nil
+    end
+  end
+
   return meta
 end
 

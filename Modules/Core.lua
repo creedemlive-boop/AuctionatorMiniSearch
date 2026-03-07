@@ -7,6 +7,7 @@
 local AMS = _G["AuctionatorMiniSearch"]
 local L = AMS.L
 local AMS_RESCAN_COOLDOWN_SECONDS = 15 * 60
+local AMS_LATEST_SCHEMA_VERSION = 2
 
 local function AMS_DebugPrint(...)
   if AMS.debugMode then
@@ -93,6 +94,102 @@ local function AMS_BuildSafeItemLink(itemID)
   return "item:" .. tostring(numericItemID)
 end
 
+local function AMS_CloneLocaleNames(names)
+  if type(names) ~= "table" then
+    return nil
+  end
+
+  local out = {}
+  for localeKey, localeName in pairs(names) do
+    if type(localeKey) == "string" and type(localeName) == "string" and localeName ~= "" then
+      out[localeKey] = AMS_StripLegacyItemLevelSuffix(localeName)
+    end
+  end
+
+  if next(out) == nil then
+    return nil
+  end
+
+  return out
+end
+
+local function AMS_BuildCompactSearchEntry(entry)
+  if type(entry) ~= "table" then
+    return nil
+  end
+
+  local itemID = tonumber(entry.itemID)
+  if not itemID then
+    return nil
+  end
+
+  local compact = {
+    itemID = itemID,
+    price = tonumber(entry.price) or 0,
+    lastCheckedAt = tonumber(entry.lastCheckedAt) or 0,
+  }
+
+  local minPrice = tonumber(entry.minPrice)
+  local maxPrice = tonumber(entry.maxPrice)
+  if minPrice and minPrice > 0 and minPrice ~= compact.price then
+    compact.minPrice = minPrice
+  end
+  if maxPrice and maxPrice > 0 and maxPrice ~= compact.price then
+    compact.maxPrice = maxPrice
+  end
+
+  local namesByLocale = AMS_CloneLocaleNames(entry.names)
+  if not namesByLocale then
+    local dataLocale = "enUS"
+    if AMS.GetDefaultLocale then
+      dataLocale = AMS.GetDefaultLocale()
+    end
+
+    local fallbackName = AMS_StripLegacyItemLevelSuffix(entry.nameLocalized or entry.baseName or entry.name)
+    if fallbackName and fallbackName ~= "" then
+      namesByLocale = {
+        [dataLocale] = fallbackName,
+      }
+    end
+  end
+
+  if namesByLocale then
+    compact.names = namesByLocale
+  end
+
+  return compact
+end
+
+local function AMS_GetSchemaVersion(settings)
+  if type(settings) ~= "table" then
+    return 1
+  end
+
+  local version = tonumber(settings.schemaVersion)
+  if not version or version < 1 then
+    return 1
+  end
+
+  return math.floor(version)
+end
+
+local function AMS_MigrateSettingsToLatest(settings)
+  if type(settings) ~= "table" then
+    return AMS_LATEST_SCHEMA_VERSION
+  end
+
+  local version = AMS_GetSchemaVersion(settings)
+
+  if version < 2 then
+    -- v2: tooltip price option removed and compact index persistence introduced.
+    settings.showPriceTooltip = nil
+    version = 2
+  end
+
+  settings.schemaVersion = AMS_LATEST_SCHEMA_VERSION
+  return version
+end
+
 -- Auctionator data references
 AMS.priceDB = nil
 AMS.auctionatorAPI = nil
@@ -117,6 +214,7 @@ function AMS.LoadSavedSettings()
   AMS_DB = AMS_DB or {}
   AMS_DB[AMS.clientKey] = AMS_DB[AMS.clientKey] or {}
   AMS.settings = AMS_DB[AMS.clientKey]
+  AMS_MigrateSettingsToLatest(AMS.settings)
 
   AMS.settings.rowCount = AMS.settings.rowCount or 15
   AMS.settings.uiPos = AMS.settings.uiPos or { point = "CENTER", x = 0, y = 0 }
@@ -139,8 +237,11 @@ function AMS.LoadSavedSettings()
   if type(AMS.settings.keepFocusOnEnter) ~= "boolean" then
     AMS.settings.keepFocusOnEnter = false
   end
-  if type(AMS.settings.showPriceTooltip) ~= "boolean" then
-    AMS.settings.showPriceTooltip = true
+  if type(AMS.settings.reconcileOnOpen) ~= "boolean" then
+    AMS.settings.reconcileOnOpen = false
+  end
+  if type(AMS.settings.keepPriceDBInMemory) ~= "boolean" then
+    AMS.settings.keepPriceDBInMemory = false
   end
 
   AMS.settings.minSearchLength = tonumber(AMS.settings.minSearchLength) or 2
@@ -167,6 +268,7 @@ function AMS.LoadSavedSettings()
   end
   AMS.settings.minimap.angle = tonumber(AMS.settings.minimap.angle) or 220
   AMS.settings.minimap.hide = AMS.settings.minimap.hide == true
+  AMS.settings.showPriceTooltip = nil
 
   -- Load index and missing-items list.
   if AMS.settings.searchIndex then
@@ -201,7 +303,7 @@ function AMS.LoadSavedSettings()
           local namesByLocale = {}
           if type(entry.names) == "table" then
             for localeKey, localeName in pairs(entry.names) do
-              if (localeKey == "deDE" or localeKey == "enUS") and type(localeName) == "string" and localeName ~= "" then
+              if type(localeKey) == "string" and type(localeName) == "string" and localeName ~= "" then
                 namesByLocale[localeKey] = AMS_StripLegacyItemLevelSuffix(localeName)
               end
             end
@@ -268,7 +370,7 @@ function AMS.LoadSavedSettings()
             existingEntry.names = existingEntry.names or {}
             if type(entry.names) == "table" then
               for localeKey, localeName in pairs(entry.names) do
-                if (localeKey == "deDE" or localeKey == "enUS") and type(localeName) == "string" and localeName ~= "" and not existingEntry.names[localeKey] then
+                if type(localeKey) == "string" and type(localeName) == "string" and localeName ~= "" and not existingEntry.names[localeKey] then
                   existingEntry.names[localeKey] = localeName
                 end
               end
@@ -376,6 +478,7 @@ function AMS.ResetSavedData()
   AMS.retryCount = AMS.retryCount or {}
   wipe(AMS.retryCount)
   AMS.analysisCache = {}
+  AMS.analysisCacheOrder = {}
   AMS.indexReady = false
   AMS.lastRescanAt = 0
 
@@ -407,9 +510,12 @@ end
 -- Persists runtime settings and index data back to SavedVariables.
 function AMS.SaveSettings()
   if not AMS.settings then return end
+  AMS.settings.schemaVersion = AMS_LATEST_SCHEMA_VERSION
   AMS.settings.rowCount = AMS.ROW_COUNT
   AMS.settings.refreshAgeDays = AMS.settings.refreshAgeDays or 2
   AMS.settings.autoDeleteAgeDays = AMS.settings.autoDeleteAgeDays or 0
+  AMS.settings.reconcileOnOpen = AMS.settings.reconcileOnOpen == true
+  AMS.settings.keepPriceDBInMemory = AMS.settings.keepPriceDBInMemory == true
   AMS.settings.lastRescanAt = AMS.lastRescanAt or AMS.settings.lastRescanAt or 0
   AMS.settings.debugMode = AMS.debugMode == true
   if AMS.frame then
@@ -418,9 +524,26 @@ function AMS.SaveSettings()
     local width, height = AMS.frame:GetSize()
     AMS.settings.uiSize = { width = width or 540, height = height or 500 }
   end
-  -- Save index and missing-items list.
-  AMS.settings.searchIndex = AMS.searchIndex or {}
-  AMS.settings.missingItems = AMS.missingItems or {}
+  -- Save index and missing-items list in compact form.
+  local compactIndex = {}
+  for _, entry in ipairs(AMS.searchIndex or {}) do
+    local compact = AMS_BuildCompactSearchEntry(entry)
+    if compact then
+      table.insert(compactIndex, compact)
+    end
+  end
+  AMS.settings.searchIndex = compactIndex
+
+  local compactMissing = {}
+  local seenMissing = {}
+  for _, id in ipairs(AMS.missingItems or {}) do
+    local numericID = tonumber(id)
+    if numericID and not seenMissing[numericID] then
+      seenMissing[numericID] = true
+      table.insert(compactMissing, numericID)
+    end
+  end
+  AMS.settings.missingItems = compactMissing
 end
 
 -- =========================
@@ -438,14 +561,17 @@ function AMS.CheckAuctionatorLoaded()
 end
 
 -- Detects Auctionator API/DB availability and binds the active realm price DB.
-function AMS.InitPriceDB()
+function AMS.InitPriceDB(loadPriceDB)
+  if loadPriceDB == nil then
+    loadPriceDB = true
+  end
+
   if not AMS.CheckAuctionatorLoaded() then
     AMS_DebugPrint(L("LOG_AUCTIONATOR_NOT_LOADED"))
     return
   end
 
   local auctionatorGlobal = rawget(_G, "Auctionator")
-  local auctionatorPriceDatabase = rawget(_G, "AUCTIONATOR_PRICE_DATABASE")
 
   if auctionatorGlobal and auctionatorGlobal.API and auctionatorGlobal.API.v1 then
     AMS.auctionatorAPI = auctionatorGlobal.API.v1
@@ -454,6 +580,12 @@ function AMS.InitPriceDB()
     AMS.auctionatorAPI = nil
     AMS_DebugPrint(L("LOG_API_NOT_FOUND_FALLBACK"))
   end
+
+  if not loadPriceDB then
+    return
+  end
+
+  local auctionatorPriceDatabase = rawget(_G, "AUCTIONATOR_PRICE_DATABASE")
 
   if not auctionatorPriceDatabase then
     AMS.priceDB = nil
@@ -487,7 +619,7 @@ function AMS.InitPriceDB()
     local success, data = pcall(C_EncodingUtil.DeserializeCBOR, priceDB)
     if success and type(data) == "table" then
       priceDB = data
-        auctionatorPriceDatabase[key] = data -- optional: replace serialized entry in place
+      -- Keep the decoded table local to AMS to avoid pinning a large copy globally.
     else
       AMS_DebugPrint(L("LOG_DB_DESERIALIZE_ERROR"))
       priceDB = nil
@@ -513,6 +645,25 @@ function AMS.InitPriceDB()
   end
 end
 
+function AMS.ReleaseTransientMemory(forceReleasePriceDB)
+  AMS.analysisCache = {}
+  AMS.analysisCacheOrder = {}
+  AMS._priceRangeByItemID = nil
+
+  local shouldReleasePriceDB = forceReleasePriceDB == true
+  if not shouldReleasePriceDB then
+    shouldReleasePriceDB = not (AMS.settings and AMS.settings.keepPriceDBInMemory == true)
+  end
+
+  if shouldReleasePriceDB then
+    AMS.priceDB = nil
+  end
+
+  if collectgarbage then
+    collectgarbage("collect")
+  end
+end
+
 -- =========================
 -- Event handling
 -- =========================
@@ -532,9 +683,9 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
   if event == "ADDON_LOADED" then
     if arg1 == "AuctionatorMiniSearch" then
       AMS.LoadSavedSettings()
-      -- Check whether Auctionator is already loaded (for example, loaded earlier by name order).
-      if AMS_IsAuctionatorLoaded() then
-        AMS.InitPriceDB()
+      -- Keep startup memory low: DB is loaded lazily only when an index build/reconcile requires it.
+      if AMS_IsAuctionatorLoaded() and not AMS.auctionatorAPI then
+        AMS.InitPriceDB(false)
       end
     end
   elseif event == "PLAYER_LOGIN" then
@@ -553,6 +704,10 @@ SLASH_AUCTIONATORMINI1 = "/ams"
 
 local function AMS_StartFollowupRefreshes()
   local function StartFollowups()
+    if not AMS.auctionatorAPI then
+      AMS.InitPriceDB(false)
+    end
+
     if AMS.RefreshMissingItems then
       AMS.RefreshMissingItems()
     end
@@ -568,7 +723,12 @@ local function AMS_StartFollowupRefreshes()
 
   AMS._amsStartFollowupRefreshes = StartFollowups
 
-  if AMS.RefreshIndexFromPriceDB then
+  local shouldRunReconcile = AMS.settings and AMS.settings.reconcileOnOpen == true
+
+  if shouldRunReconcile and AMS.RefreshIndexFromPriceDB then
+    if type(AMS.priceDB) ~= "table" then
+      AMS.InitPriceDB()
+    end
     AMS.RefreshIndexFromPriceDB()
     if not AMS.isReconcilingIndex and AMS._amsStartFollowupRefreshes then
       local cb = AMS._amsStartFollowupRefreshes
@@ -628,6 +788,17 @@ local function AMS_ToggleMainFrame()
 
   local wasHidden = not AMS.frame:IsShown()
   AMS.frame:SetShown(wasHidden)
+
+  if not wasHidden then
+    AMS.ReleaseTransientMemory(false)
+    return
+  end
+
+  local needsPriceDBForBuild = not AMS.indexReady
+  local needsPriceDBForReconcile = AMS.settings and AMS.settings.reconcileOnOpen == true
+  if (needsPriceDBForBuild or needsPriceDBForReconcile) and type(AMS.priceDB) ~= "table" then
+    AMS.InitPriceDB()
+  end
 
   if wasHidden and not AMS.indexReady then
     C_Timer.After(0.1, function()

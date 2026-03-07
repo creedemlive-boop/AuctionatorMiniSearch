@@ -2,7 +2,7 @@
 
 ## Title: Auctionator Mini Search (Retail)
 ## Author: Creedem@Blackrock
-## Version: 1.0
+## Version: 1.0.1
 ## Notes: Fast search in Auctionator database
 ## SavedVariables: AMS_DB
 ## Category: Auctions

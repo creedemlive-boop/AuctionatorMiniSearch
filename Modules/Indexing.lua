@@ -16,6 +16,8 @@ function AMS.CancelAllRefreshJobs()
   if AMS.statusText then
     AMS.statusText:SetText(L("STATUS_JOBS_ABORTED"))
   end
+  AMS.analysisCache = {}
+  AMS.analysisCacheOrder = {}
 end
 
 local function ResolveItemName(itemID)
@@ -125,7 +127,7 @@ local function BuildNameFields(existingEntry, resolvedName)
   local namesByLocale = {}
   if existingEntry and type(existingEntry.names) == "table" then
     for localeKey, localeName in pairs(existingEntry.names) do
-      if (localeKey == "deDE" or localeKey == "enUS") and type(localeName) == "string" and localeName ~= "" then
+      if type(localeKey) == "string" and type(localeName) == "string" and localeName ~= "" then
         namesByLocale[localeKey] = localeName
       end
     end
@@ -383,6 +385,7 @@ function AMS.RefreshStalePrices()
 
     AMS.isRefreshingStale = false
     AMS.analysisCache = {}
+    AMS.analysisCacheOrder = {}
 
     if (updated > 0 or removed > 0) and AMS.SaveSettings then
       AMS.SaveSettings()
@@ -650,6 +653,10 @@ function AMS.RefreshIndexFromPriceDB()
         AMS.PerformSearch(text)
       end
     end
+
+    if AMS.ReleaseTransientMemory then
+      AMS.ReleaseTransientMemory(false)
+    end
   end
 
   local function ProcessBatch(startIndex)
@@ -737,6 +744,10 @@ function AMS.ProcessMissingBatch(startIndex)
       AMS.searchBox:Enable()
       AMS.progressBar:Hide()
       AMS.progressFill:Hide()
+
+      if AMS.ReleaseTransientMemory then
+        AMS.ReleaseTransientMemory(false)
+      end
     else
       AMS.statusText:SetText(L("STATUS_NO_MISSING_ITEMS_OPEN"))
     end
@@ -798,6 +809,11 @@ function AMS.ProcessMissingBatch(startIndex)
       AMS.searchBox:Enable()
       AMS.progressBar:Hide()
       AMS.progressFill:Hide()
+
+      if AMS.ReleaseTransientMemory then
+        AMS.ReleaseTransientMemory(false)
+      end
+
       print(L("LOG_INDEX_FULLY_LOADED_FMT", #AMS.searchIndex))
     else
       AMS.statusText:SetText(L("STATUS_MISSING_UPDATED_FMT", context.recovered, #AMS.missingItems))
@@ -862,6 +878,7 @@ function AMS.BuildIndex()
   AMS.missingSet = {}
   wipe(AMS.retryCount)
   AMS.analysisCache = {}
+  AMS.analysisCacheOrder = {}
 
   -- Check whether a valid price database table is available.
   if type(AMS.priceDB) ~= "table" then
@@ -932,6 +949,10 @@ function AMS.BuildIndex()
         AMS.statusText:SetText(L("STATUS_READY"))
         AMS.searchBox:Enable()
         AMS._priceRangeByItemID = nil
+
+        if AMS.ReleaseTransientMemory then
+          AMS.ReleaseTransientMemory(false)
+        end
 
         AMS.progressBar:Hide()
         AMS.progressFill:Hide()
